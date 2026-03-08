@@ -104,7 +104,8 @@ def init_db():
     try:
         conn_params = {
             'host': DB_HOST, 'port': DB_PORT, 
-            'user': DB_USER, 'password': DB_PASS
+            'user': DB_USER, 'password': DB_PASS,
+            'connect_timeout': 10
         }
         if os.getenv('DB_SSL_REQUIRED', 'false').lower() == 'true':
             conn_params['ssl'] = {'ca': certifi.where()}
@@ -114,8 +115,10 @@ def init_db():
             cur.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` COLLATE utf8mb4_unicode_ci;")
         temp_conn.commit()
         temp_conn.close()
+        print(f"[DB] Baza holati tekshirildi: {DB_NAME}")
     except Exception as e:
-        print(f"[DB] Baza yaratishda xato: {e}")
+        print(f"[DB] Baza yaratishda/ulanishda xato: {e}")
+        print(f"Iltimos Aiven.io dagi 'IP Filter List' ga 0.0.0.0/0 ni qo'shganingizga ishonch hosil qiling!")
         return
 
     # Endi jadvallarni ulab yaratamiz
@@ -284,13 +287,21 @@ def get_messages(sid):
 # ── Chat (asosiy endpoint) ──
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    body = request.get_json(force=True)
-    sid     = body.get('session_id', '').strip()
-    message = body.get('message', '').strip()
-    img_b64 = body.get('image_base64', '')   # optional base64
+    try:
+        body = request.get_json(force=True)
+    except:
+        return jsonify({'error': 'JSON formatida xabar yuboring'}), 400
+        
+    if not body:
+        return jsonify({'error': 'Bo\'sh xabar yuborildi'}), 400
+        
+    sid     = str(body.get('session_id', '')).strip()
+    message = str(body.get('message', '')).strip()
+    img_b64 = body.get('image_base64', '')
     img_mime= body.get('image_mime', 'image/jpeg')
 
     if not sid or not message:
+        print(f"[CHAT] Xato: sid={sid}, msg={message}, body={body}")
         return jsonify({'error': 'session_id va message majburiy'}), 400
 
     conn = get_db()
