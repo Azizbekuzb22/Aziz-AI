@@ -79,21 +79,37 @@ Seni O'zbekistonlik iqtidorli dasturchi AZIZ TORAQULOV mahsus yaratgan.
 """
 
 # ─── DATABASE SETUP ───────────────────────────────────────────────────────────
+import certifi
+
 def get_db():
-    conn = pymysql.connect(
-        host=DB_HOST, port=DB_PORT,
-        user=DB_USER, password=DB_PASS,
-        database=DB_NAME,
-        charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=False
-    )
+    conn_params = {
+        'host': DB_HOST,
+        'port': DB_PORT,
+        'user': DB_USER,
+        'password': DB_PASS,
+        'database': DB_NAME,
+        'charset': 'utf8mb4',
+        'cursorclass': pymysql.cursors.DictCursor,
+        'autocommit': False
+    }
+    
+    if os.getenv('DB_SSL_REQUIRED', 'false').lower() == 'true':
+        conn_params['ssl'] = {'ca': certifi.where()}
+        
+    conn = pymysql.connect(**conn_params)
     return conn
 
 def init_db():
     # Avval bazaning o'zi borligini tekshiramiz va yo'q bo'lsa yaratamiz
     try:
-        temp_conn = pymysql.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASS)
+        conn_params = {
+            'host': DB_HOST, 'port': DB_PORT, 
+            'user': DB_USER, 'password': DB_PASS
+        }
+        if os.getenv('DB_SSL_REQUIRED', 'false').lower() == 'true':
+            conn_params['ssl'] = {'ca': certifi.where()}
+            
+        temp_conn = pymysql.connect(**conn_params)
         with temp_conn.cursor() as cur:
             cur.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` COLLATE utf8mb4_unicode_ci;")
         temp_conn.commit()

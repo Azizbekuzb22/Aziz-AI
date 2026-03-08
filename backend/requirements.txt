@@ -8,3 +8,5 @@ docx2txt
 gunicorn
 PyMySQL
 cryptography
+
+certifi
