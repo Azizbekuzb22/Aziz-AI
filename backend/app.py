@@ -100,58 +100,36 @@ def get_db():
     return conn
 
 def init_db():
-    # Avval bazaning o'zi borligini tekshiramiz va yo'q bo'lsa yaratamiz
+    # Aiven managed DB - defaultdb allaqachon mavjud, jadvallarni yaratamiz
     try:
-        conn_params = {
-            'host': DB_HOST, 'port': DB_PORT, 
-            'user': DB_USER, 'password': DB_PASS,
-            'connect_timeout': 10
-        }
-        if os.getenv('DB_SSL_REQUIRED', 'false').lower() == 'true':
-            conn_params['ssl'] = {'ssl': {}}
-            conn_params['ssl_verify_cert'] = False
-            conn_params['ssl_verify_identity'] = False
-            
-        temp_conn = pymysql.connect(**conn_params)
-        with temp_conn.cursor() as cur:
-            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` COLLATE utf8mb4_unicode_ci;")
-        temp_conn.commit()
-        temp_conn.close()
-        print(f"[DB] Baza holati tekshirildi: {DB_NAME}")
+        conn = get_db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute('''
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        id         VARCHAR(36) PRIMARY KEY,
+                        title      VARCHAR(255) DEFAULT "Yangi suhbat",
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                ''')
+                cur.execute('''
+                    CREATE TABLE IF NOT EXISTS messages (
+                        id         INT AUTO_INCREMENT PRIMARY KEY,
+                        session_id VARCHAR(36) NOT NULL,
+                        role       ENUM("user","model") NOT NULL,
+                        content    LONGTEXT NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+                        INDEX idx_msg_session (session_id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                ''')
+            conn.commit()
+            print(f'[DB] MySQL bazasi tayyor: {DB_NAME}@{DB_HOST}:{DB_PORT}')
+        finally:
+            conn.close()
     except Exception as e:
-        print(f"[DB] Baza yaratishda/ulanishda xato: {e}")
-        print(f"Iltimos Aiven.io dagi 'IP Filter List' ga 0.0.0.0/0 ni qo'shganingizga ishonch hosil qiling!")
-        return
-
-    # Endi jadvallarni ulab yaratamiz
-    conn = get_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS sessions (
-                    id         VARCHAR(36) PRIMARY KEY,
-                    title      VARCHAR(255) DEFAULT "Yangi suhbat",
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            ''')
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS messages (
-                    id         INT AUTO_INCREMENT PRIMARY KEY,
-                    session_id VARCHAR(36) NOT NULL,
-                    role       ENUM("user","model") NOT NULL,
-                    content    LONGTEXT NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-                    INDEX idx_msg_session (session_id)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            ''')
-        conn.commit()
-        print(f'[DB] MySQL bazasi tayyor: {DB_NAME}@{DB_HOST}:{DB_PORT}')
-    except Exception as e:
-        print(f'[DB] Xato: {e}')
-    finally:
-        conn.close()
+        print(f'[DB] Ulanish xatosi: {e}')
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
 import json
