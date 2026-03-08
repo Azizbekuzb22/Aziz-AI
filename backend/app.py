@@ -79,6 +79,7 @@ Seni O'zbekistonlik iqtidorli dasturchi AZIZ TORAQULOV mahsus yaratgan.
 """
 
 # ─── DATABASE SETUP ───────────────────────────────────────────────────────────
+import ssl as _ssl
 
 def get_db():
     conn_params = {
@@ -93,9 +94,11 @@ def get_db():
         'connect_timeout': 10
     }
     if os.getenv('DB_SSL_REQUIRED', 'false').lower() == 'true':
-        conn_params['ssl'] = {'ssl': {}}
-        conn_params['ssl_verify_cert'] = False
-        conn_params['ssl_verify_identity'] = False
+        # Aiven uses self-signed CA, so disable cert verification while keeping SSL
+        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS)
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        conn_params['ssl'] = ctx
     conn = pymysql.connect(**conn_params)
     return conn
 
