@@ -79,17 +79,6 @@ Seni O'zbekistonlik iqtidorli dasturchi AZIZ TORAQULOV mahsus yaratgan.
 """
 
 # ─── DATABASE SETUP ───────────────────────────────────────────────────────────
-import certifi
-import ssl as ssl_module
-
-def _get_ssl_ctx():
-    """SSL context for Aiven MySQL - disables cert verification since Aiven uses custom CA"""
-    if os.getenv('DB_SSL_REQUIRED', 'false').lower() != 'true':
-        return None
-    ctx = ssl_module.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl_module.CERT_NONE
-    return ctx
 
 def get_db():
     conn_params = {
@@ -103,9 +92,10 @@ def get_db():
         'autocommit': False,
         'connect_timeout': 10
     }
-    ssl_ctx = _get_ssl_ctx()
-    if ssl_ctx:
-        conn_params['ssl'] = ssl_ctx
+    if os.getenv('DB_SSL_REQUIRED', 'false').lower() == 'true':
+        conn_params['ssl'] = {'ssl': {}}
+        conn_params['ssl_verify_cert'] = False
+        conn_params['ssl_verify_identity'] = False
     conn = pymysql.connect(**conn_params)
     return conn
 
@@ -117,9 +107,10 @@ def init_db():
             'user': DB_USER, 'password': DB_PASS,
             'connect_timeout': 10
         }
-        ssl_ctx = _get_ssl_ctx()
-        if ssl_ctx:
-            conn_params['ssl'] = ssl_ctx
+        if os.getenv('DB_SSL_REQUIRED', 'false').lower() == 'true':
+            conn_params['ssl'] = {'ssl': {}}
+            conn_params['ssl_verify_cert'] = False
+            conn_params['ssl_verify_identity'] = False
             
         temp_conn = pymysql.connect(**conn_params)
         with temp_conn.cursor() as cur:
