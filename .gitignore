@@ -1,0 +1,35 @@
+# === AzizAI - .gitignore ===
+# Bu fayllar GitHub ga yuklanmasin!
+
+# Maxfiy konfiguratsiya
+.env
+*.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+
+# Virtual muhit
+venv/
+env/
+.venv/
+
+# Ma'lumotlar bazasi
+backend/database.db
+*.db
+*.sqlite
+
+# VS Code
+.vscode/
+
+# OS fayllar
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Log fayllar
+*.log
