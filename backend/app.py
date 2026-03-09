@@ -111,7 +111,7 @@ def init_db():
                 cur.execute('''
                     CREATE TABLE IF NOT EXISTS sessions (
                         id         VARCHAR(36) PRIMARY KEY,
-                        title      VARCHAR(255) DEFAULT "Yangi suhbat",
+                        title      VARCHAR(255) DEFAULT 'Yangi suhbat',
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -120,7 +120,7 @@ def init_db():
                     CREATE TABLE IF NOT EXISTS messages (
                         id         INT AUTO_INCREMENT PRIMARY KEY,
                         session_id VARCHAR(36) NOT NULL,
-                        role       ENUM("user","model") NOT NULL,
+                        role       ENUM('user','model') NOT NULL,
                         content    LONGTEXT NOT NULL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
