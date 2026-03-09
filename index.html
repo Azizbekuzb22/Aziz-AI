@@ -715,18 +715,62 @@
 
             .msg-row {
                 max-width: 100%;
-                padding: 0 1rem;
+                padding: 0 0.5rem;
             }
 
             .input-wrapper {
-                padding: 1rem;
+                padding: 0.5rem;
             }
 
             .avatar {
-                margin: 0 0.5rem;
-                width: 30px;
-                height: 30px;
-                font-size: 0.8rem;
+                margin: 0 0.25rem;
+                width: 28px;
+                height: 28px;
+                font-size: 0.75rem;
+            }
+
+            /* Mobilda ortiqcha tugmalarni yashir */
+            .action-btn[id="btn-tts"],
+            .action-btn[id="btn-export"],
+            .action-btn[id="btn-search"] {
+                display: none;
+            }
+
+            /* Sarlavha matnini qisqartir */
+            #top-title {
+                font-size: 0.9rem;
+                max-width: 120px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            /* Xabar pufakchalari mobilda to'la kenglik */
+            .bubble {
+                max-width: 85vw !important;
+            }
+
+            /* Input maydoni pastki chekkasiz */
+            .input-container {
+                border-radius: 16px;
+            }
+
+            /* Vaqt belgisi kichikroq */
+            .msg-time {
+                font-size: 0.65rem;
+            }
+        }
+
+        @media (max-width: 400px) {
+
+            /* Juda kichik ekranlar uchun */
+            .action-btn {
+                width: 34px;
+                height: 34px;
+            }
+
+            .header-actions {
+                gap: 2px;
             }
         }
 
@@ -1131,13 +1175,17 @@
         async function newSession() {
             try {
                 const res = await fetch(`${API}/sessions`, { method: 'POST' });
+                if (!res.ok) throw new Error('Server ' + res.status);
                 const data = await res.json();
+                if (!data.session_id) throw new Error('session_id kelmadi');
                 currentSession = data.session_id;
                 topTitle.textContent = "Yangi suhbat";
                 msgContainer.innerHTML = '';
                 welcomeScreen.classList.remove('hidden');
                 await loadSessions();
-            } catch (err) { showToast("Yangi suhbat yaratib bo'lmadi", "err"); }
+            } catch (err) {
+                showToast("Backend baza yuklanmoqda, 10 soniyadan keyin qayta urining!", "err");
+            }
         }
 
         async function selectSession(id, title) {
@@ -1210,6 +1258,15 @@
             btnSend.disabled = true;
             isWaiting = true;
             welcomeScreen.classList.add('hidden');
+
+            // Session yaratilmagan bo'lsa, xabar yuborma
+            if (!currentSession) {
+                showToast("Avval 'Yangi suhbat' tugmasini bosing!", "err");
+                chatInput.value = text;
+                isWaiting = false;
+                btnSend.disabled = false;
+                return;
+            }
 
             // Collect img before removing it
             const imgPayload = selectedImage;
