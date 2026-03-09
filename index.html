@@ -1125,7 +1125,8 @@
 
         async function checkServer() {
             try {
-                const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+                // Render bepul serverlari uyg'onishi uchun 50-60 soniya ketishi mumkin
+                const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(60000) });
                 if (res.ok) {
                     setStatus(true);
                     await loadSessions();
@@ -1135,7 +1136,7 @@
                 }
             } catch (err) {
                 setStatus(false);
-                showToast("Backend ishlamayapti. Run Backend.bat ni bosib serverni yoqing.", "err");
+                showToast("Backend uyg'onmoqda yoki uzilgan. Iltimos 1 daqiqa kutib sahifani yangilang.", "err");
             }
         }
 
