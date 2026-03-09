@@ -147,9 +147,10 @@ def stream_gemini(history: list[dict]):
         'contents': contents,
         'generationConfig': {
              'temperature': 0.8,
-             'topK': 40,
-             'topP': 0.95,
-             'maxOutputTokens': 2048
+            'temperature': 0.7,
+            'topK': 40,
+            'topP': 0.95,
+            'maxOutputTokens': 8192
         }
     }
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:streamGenerateContent?alt=sse&key={GEMINI_API_KEY}'
