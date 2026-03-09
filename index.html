@@ -365,6 +365,7 @@
             grid-template-columns: repeat(2, 1fr);
             gap: 1rem;
             max-width: 600px;
+            margin: 0 auto;
         }
 
         .suggestion-card {
@@ -424,12 +425,14 @@
         }
 
         .bubble {
-            max-width: 80%;
+            display: inline-block;
             padding: 1rem 1.2rem;
             line-height: 1.6;
             font-size: 0.95rem;
             border-radius: 16px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            word-wrap: break-word;
+            word-break: break-word;
         }
 
         .msg-user .bubble {
@@ -747,7 +750,8 @@
 
             /* Xabar pufakchalari mobilda to'la kenglik */
             .bubble {
-                max-width: 85vw !important;
+                padding: 0.8rem 1rem !important;
+                font-size: 0.9rem !important;
             }
 
             /* Input maydoni pastki chekkasiz */
@@ -1372,7 +1376,7 @@
                 : marked.parse(text);
 
             const actions = role !== 'user' ? `
-                <div class="msg-actions">
+                <div class="msg-actions" style="margin-top: 5px;">
                     <button class="msg-action-btn" onclick="copyMsg(this)" title="Nusxa">
                         <i class="fas fa-copy"></i> Nusxa
                     </button>
@@ -1381,11 +1385,14 @@
                     </button>
                 </div>` : '';
 
+            // User xabarlarini o'ng tomonga moslashtirish uchun flex ishlatamiz
+            const msgAlign = role === 'user' ? 'align-items: flex-end; text-align: right;' : 'align-items: flex-start; text-align: left;';
+
             row.innerHTML = `
                 ${avatar}
-                <div style="max-width: calc(100% - 70px);">
+                <div style="display: flex; flex-direction: column; max-width: calc(100% - 60px); ${msgAlign}">
                     <div class="bubble">${content}</div>
-                    <span class="msg-time">${new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span class="msg-time" style="margin-top: 4px;">${new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</span>
                     ${actions}
                 </div>
             `;
