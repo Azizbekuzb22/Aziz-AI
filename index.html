@@ -1568,9 +1568,13 @@
         }
 
         function checkEnter(e) {
+            // Telefonlarda (ekran 768px dan kichik) Enter faqat yangi qatorga o'tish uchun xizmat qiladi. 
+            // Kompyuterda esa (yoki shift+enter) yuborish uchun.
             if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
+                if (window.innerWidth > 768) {
+                    e.preventDefault();
+                    sendMessage();
+                }
             }
         }
 
