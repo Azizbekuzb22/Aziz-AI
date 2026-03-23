@@ -139,6 +139,49 @@ def init_db():
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
 
+# Rasm yaratish so'rov kalitlari
+IMAGE_KEYWORDS = [
+    'rasm yarat', 'rasm chiqar', 'rasm chiz', 'rasm tort',
+    'surat yarat', 'surat chiqar', 'chizib ber', 'tasvirla',
+    'draw', 'generate image', 'create image', 'make image',
+    'paint', 'illustrate', 'show me a picture', 'show picture',
+    'rasmini yarat', 'rasmini chiqar', 'generate a', 'create a picture'
+]
+
+def is_image_request(message: str) -> bool:
+    """Foydalanuvchi rasm so'rayotganini aniqlaydi."""
+    msg_lower = message.lower()
+    return any(kw in msg_lower for kw in IMAGE_KEYWORDS)
+
+def get_image_prompt_via_gemini(user_message: str) -> str:
+    """Foydalanuvchi so'rovidan inglizcha rasm tavsifi olamiz."""
+    url = (
+        f'https://generativelanguage.googleapis.com/v1beta/models/'
+        f'gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}'
+    )
+    payload = {
+        'contents': [{'role': 'user', 'parts': [{'text':
+            f"Convert this image request into a short, descriptive English prompt for an AI image generator. "
+            f"Return ONLY the English prompt, nothing else, no explanations:\n\n{user_message}"
+        }]}]
+    }
+    try:
+        r = requests.post(url, json=payload, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        prompt = data['candidates'][0]['content']['parts'][0]['text'].strip()
+        return prompt[:400]  # max 400 character
+    except Exception:
+        # Fallback: to'g'ri foydalanuvchi matni
+        return user_message[:300]
+
+def generate_image_url(prompt: str) -> str:
+    """Pollinations.ai orqali rasm URL si hosil qiladi (bepul, API kerak emas)."""
+    import urllib.parse
+    encoded = urllib.parse.quote(prompt)
+    return f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=768&nologo=true&model=flux&seed={uuid.uuid4().int % 99999}"
+
+
 def stream_gemini(history):
     """Gemini API ga SSE stream so'rovi yuboradi va matn bo'laklarini yield qiladi."""
     contents = [
@@ -354,7 +397,50 @@ def chat():
 
     is_first = not prev
 
+    # ── RASM YARATISH (Pollinations.ai) ──────────────────────────────────────
+    if is_image_request(user_text) and not img_b64:
+        def generate_img():
+            try:
+                # Gemini orqali inglizcha prompt yaratamiz
+                eng_prompt = get_image_prompt_via_gemini(user_text)
+                img_url = generate_image_url(eng_prompt)
+
+                # DB ga saqlash
+                now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                ai_reply = f"![Generated Image]({img_url})\n\n*Prompt: {eng_prompt}*"
+                try:
+                    db2 = get_db()
+                    try:
+                        with db2.cursor() as cur:
+                            cur.execute(
+                                'INSERT INTO messages (session_id, role, content, created_at) VALUES (%s, %s, %s, %s)',
+                                (sid, 'user', user_text, now)
+                            )
+                            cur.execute(
+                                'INSERT INTO messages (session_id, role, content, created_at) VALUES (%s, %s, %s, %s)',
+                                (sid, 'model', ai_reply, now)
+                            )
+                            if is_first:
+                                cur.execute('UPDATE sessions SET title=%s WHERE id=%s', (short_title(user_text), sid))
+                            else:
+                                cur.execute('UPDATE sessions SET updated_at=%s WHERE id=%s', (now, sid))
+                        db2.commit()
+                    finally:
+                        db2.close()
+                except Exception as db_err:
+                    print(f"[DB] Saqlash xatosi: {db_err}")
+
+                yield f"data: {json.dumps({'chunk': ai_reply}, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+        return Response(generate_img(), mimetype='text/event-stream',
+                        headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache'})
+    # ─────────────────────────────────────────────────────────────────────────
+
     def generate():
+
         ai_reply = ""
         try:
             for chunk in stream_gemini(history):
