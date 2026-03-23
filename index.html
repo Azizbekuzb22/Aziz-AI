@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>AzizAI | Neural Chat</title>
     <meta name="description" content="Next generation AI Chatbot powered by Gemini 1.5 Flash.">
     <!-- Fonts -->
@@ -29,10 +29,12 @@
             /* Indigo */
             --accent-2: #d946ef;
             /* Fuchsia */
+            --accent-glow: rgba(99, 102, 241, 0.4);
             --user-bubble: linear-gradient(135deg, #4f46e5, #9333ea);
             --ai-bubble: rgba(255, 255, 255, 0.04);
             --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             --sidebar-width: 280px;
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         body.light-mode {
@@ -44,6 +46,7 @@
             --text-secondary: #475569;
             --ai-bubble: rgba(255, 255, 255, 1);
             --user-bubble: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            --accent-glow: rgba(59, 130, 246, 0.4);
         }
 
         body.light-mode .ambient-mesh {
@@ -61,10 +64,16 @@
         body {
             background-color: var(--bg-color);
             color: var(--text-primary);
-            height: 100vh;
+            height: 100%;
+            height: 100dvh;
             overflow: hidden;
             display: flex;
             position: relative;
+        }
+
+        html {
+            height: 100%;
+            height: 100dvh;
         }
 
         /* ----- BACKGROUND MESH ----- */
@@ -121,8 +130,9 @@
             border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            z-index: 10;
-            transition: var(--transition);
+            z-index: 20;
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            flex-shrink: 0;
         }
 
         .sb-header {
@@ -228,10 +238,19 @@
             cursor: pointer;
             opacity: 0;
             transition: var(--transition);
+            padding: 4px 6px;
+            border-radius: 4px;
+            flex-shrink: 0;
         }
 
         .session-item:hover .btn-del {
             opacity: 1;
+        }
+
+        @media (pointer: coarse) {
+            .btn-del {
+                opacity: 0.6;
+            }
         }
 
         .btn-del:hover {
@@ -256,11 +275,14 @@
             position: relative;
             z-index: 1;
             height: 100%;
+            min-width: 0;
+            overflow: hidden;
         }
 
         .top-bar {
             height: 60px;
-            padding: 0 1.5rem;
+            min-height: 60px;
+            padding: 0 1rem;
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
@@ -268,6 +290,8 @@
             background: rgba(9, 9, 11, 0.5);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
+            flex-shrink: 0;
+            overflow: hidden;
         }
 
         .mobile-toggle {
@@ -309,8 +333,11 @@
         .chat-area {
             flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
             padding: 2rem;
             scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
         }
 
         .chat-area::-webkit-scrollbar {
@@ -366,6 +393,8 @@
             gap: 1rem;
             max-width: 600px;
             margin: 0 auto;
+            width: 100%;
+            padding: 0 1rem;
         }
 
         .suggestion-card {
@@ -484,10 +513,12 @@
 
         /* ----- INPUT AREA ----- */
         .input-wrapper {
-            padding: 1.5rem 2rem;
+            padding: 1rem 2rem;
+            padding-bottom: calc(1rem + var(--safe-bottom));
             max-width: 900px;
             margin: 0 auto;
             width: 100%;
+            flex-shrink: 0;
         }
 
         .input-container {
@@ -699,13 +730,18 @@
         /* ----- RESPONSIVE ----- */
         @media (max-width: 768px) {
             .sidebar {
-                position: absolute;
-                left: -100%;
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100%;
+                height: 100dvh;
+                transform: translateX(-100%);
                 box-shadow: 20px 0 50px rgba(0, 0, 0, 0.5);
+                z-index: 20;
             }
 
             .sidebar.open {
-                left: 0;
+                transform: translateX(0);
             }
 
             .mobile-toggle {
@@ -714,65 +750,83 @@
 
             .suggestions {
                 grid-template-columns: 1fr;
+                padding: 0 0.5rem;
             }
 
             .msg-row {
                 max-width: 100%;
-                padding: 0;
-                margin-bottom: 1.5rem;
+                padding: 0 0.5rem;
+                margin-bottom: 1.2rem;
             }
 
             .chat-area {
-                padding: 1rem 0.2rem;
+                padding: 1rem 0;
             }
 
             .input-wrapper {
-                padding: 0.5rem;
+                padding: 0.5rem 0.75rem;
+                padding-bottom: calc(0.5rem + var(--safe-bottom));
             }
 
             .avatar {
                 display: none !important;
             }
 
-            .msg-row>div {
-                max-width: 95vw !important;
-            }
-
-            /* Mobilda ortiqcha tugmalarni yashir */
-            .action-btn[id="btn-tts"],
-            .action-btn[id="btn-export"],
-            .action-btn[id="btn-search"] {
-                display: none;
+            .msg-row > div {
+                max-width: 100% !important;
             }
 
             /* Sarlavha matnini qisqartir */
             #top-title {
-                font-size: 0.9rem;
-                max-width: 120px;
+                font-size: 0.85rem;
+                max-width: 110px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
 
-            /* Xabar pufakchalari mobilda to'la kenglik */
+            /* Xabar pufakchalari */
             .bubble {
-                padding: 0.8rem 1rem !important;
-                font-size: 0.9rem !important;
-            }
-
-            /* Input maydoni pastki chekkasiz */
-            .input-container {
-                border-radius: 16px;
+                padding: 0.75rem 0.9rem !important;
+                font-size: 0.88rem !important;
+                max-width: calc(100vw - 2rem);
             }
 
             /* Vaqt belgisi kichikroq */
             .msg-time {
                 font-size: 0.65rem;
             }
+
+            /* Top bar tugmalari */
+            .status {
+                gap: 0.2rem;
+            }
+
+            /* Welcome screen kichikroq */
+            .w-title {
+                font-size: 1.5rem;
+            }
+
+            .w-sub {
+                font-size: 0.88rem;
+            }
+
+            .w-icon {
+                font-size: 3rem;
+            }
+
+            /* Input row */
+            .input-row {
+                gap: 0.3rem;
+            }
+
+            /* Overlay z-index */
+            .overlay {
+                z-index: 15;
+            }
         }
 
         @media (max-width: 400px) {
-
             /* Juda kichik ekranlar uchun */
             .action-btn {
                 width: 34px;
@@ -782,6 +836,10 @@
             .header-actions {
                 gap: 2px;
             }
+
+            #top-title {
+                max-width: 80px;
+            }
         }
 
         .overlay {
@@ -789,8 +847,9 @@
             position: fixed;
             inset: 0;
             background: rgba(0, 0, 0, 0.5);
-            z-index: 5;
+            z-index: 15;
             backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
         }
 
         .overlay.show {
@@ -808,6 +867,13 @@
 
         .msg-row:hover .msg-actions {
             opacity: 1;
+        }
+
+        /* Mobil qurilmalarda har doim ko'rsatish */
+        @media (pointer: coarse) {
+            .msg-actions {
+                opacity: 0.75;
+            }
         }
 
         .msg-action-btn {
@@ -1022,7 +1088,7 @@
                 <div class="suggestions">
                     <div class="suggestion-card"
                         onclick="useSuggestion('Menga koinot va qora tuynuklar haqida qiziqarli ma\'lumot bering.')">
-                        <i class="fas fa-planet-ringed"></i>
+                        <i class="fas fa-satellite"></i>
                         <h4>Koinot haqida</h4>
                         <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">Qora tuynuklar siri
                         </p>
@@ -1270,9 +1336,9 @@
             isWaiting = true;
             welcomeScreen.classList.add('hidden');
 
-            // Session yaratilmagan bo'lsa, xabar yuborma
+            // Qo'shimcha tekshiruv: agar session baribir yaratilmagan bo'lsa (Backend uxlab yotgan bo'lsa)
             if (!currentSession) {
-                showToast("Avval 'Yangi suhbat' tugmasini bosing!", "err");
+                // newSession() funksiyasi o'zi nima xato ekanini ko'rsatadi, faqat to'xtatamiz.
                 chatInput.value = text;
                 isWaiting = false;
                 btnSend.disabled = false;
@@ -1394,10 +1460,11 @@
 
             // User xabarlarini o'ng tomonga moslashtirish uchun flex ishlatamiz
             const msgAlign = role === 'user' ? 'align-items: flex-end; text-align: right;' : 'align-items: flex-start; text-align: left;';
+            const maxWidth = role === 'user' ? 'max-width: min(80%, 620px); width: fit-content; margin-left: auto;' : 'max-width: min(85%, 720px);';
 
             row.innerHTML = `
                 ${avatar}
-                <div style="display: flex; flex-direction: column; max-width: calc(100% - 60px); ${msgAlign}">
+                <div style="display: flex; flex-direction: column; ${maxWidth} ${msgAlign}">
                     <div class="bubble">${content}</div>
                     <span class="msg-time" style="margin-top: 4px;">${new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</span>
                     ${actions}
