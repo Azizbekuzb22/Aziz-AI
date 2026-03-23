@@ -17,36 +17,35 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
     <style>
         :root {
-            --bg-color: #09090b;
-            /* Zinc 950 */
-            --panel-bg: rgba(24, 24, 27, 0.6);
-            /* Zinc 900 w/ opacity */
-            --border: rgba(255, 255, 255, 0.08);
-            --border-hover: rgba(255, 255, 255, 0.15);
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --accent-1: #6366f1;
-            /* Indigo */
-            --accent-2: #d946ef;
-            /* Fuchsia */
-            --accent-glow: rgba(99, 102, 241, 0.4);
-            --user-bubble: linear-gradient(135deg, #4f46e5, #9333ea);
-            --ai-bubble: rgba(255, 255, 255, 0.04);
+            /* Gemini Official Dark Theme */
+            --bg-color: #131314;
+            --panel-bg: rgba(30, 31, 32, 0.8);
+            --border: rgba(255, 255, 255, 0.1);
+            --border-hover: rgba(255, 255, 255, 0.2);
+            --text-primary: #e3e3e3;
+            --text-secondary: #c4c7c5;
+            --accent-1: #a8c7fa; /* Gemini Blue */
+            --accent-2: #c4c7c5;
+            --accent-glow: rgba(168, 199, 250, 0.2);
+            --user-bubble: #282a2c;
+            --ai-bubble: transparent;
             --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-            --sidebar-width: 280px;
+            --sidebar-width: 300px;
             --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         body.light-mode {
-            --bg-color: #f8fafc;
-            --panel-bg: rgba(255, 255, 255, 0.8);
+            /* Gemini Official Light Theme */
+            --bg-color: #ffffff;
+            --panel-bg: rgba(240, 244, 249, 0.9);
             --border: rgba(0, 0, 0, 0.1);
             --border-hover: rgba(0, 0, 0, 0.2);
-            --text-primary: #0f172a;
-            --text-secondary: #475569;
-            --ai-bubble: rgba(255, 255, 255, 1);
-            --user-bubble: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            --accent-glow: rgba(59, 130, 246, 0.4);
+            --text-primary: #1f1f1f;
+            --text-secondary: #444746;
+            --ai-bubble: transparent;
+            --user-bubble: #f0f4f9;
+            --accent-1: #0b57d0; /* Gemini Dark Blue */
+            --accent-glow: rgba(11, 87, 208, 0.15);
         }
 
         body.light-mode .ambient-mesh {

@@ -1,10 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import pymysql
 import pymysql.cursors
 import requests
 import uuid
 import os
+import json
+import ssl as _ssl
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -16,14 +18,17 @@ load_dotenv()
 app = Flask(__name__)
 
 # CORS: mahalliy va deploy muhitlari uchun
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:5000').split(',')
+ALLOWED_ORIGINS = os.getenv(
+    'ALLOWED_ORIGINS',
+    'http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:5000,http://localhost:5000'
+).split(',')
 CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=False)
 
-# Spam himoyasi: IP manzil bo'yicha cheklovlar
+# Spam himoyasi
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["500 per day", "50 per hour"],
+    default_limits=["500 per day", "60 per hour"],
     storage_uri="memory://"
 )
 
@@ -33,16 +38,15 @@ def handle_error(e):
     return jsonify({'error': str(e)}), code
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'default')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 GEMINI_MODEL   = 'gemini-2.5-flash'
-GEMINI_URL     = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}'
 
 # MySQL konfiguratsiya
 DB_HOST = os.getenv('DB_HOST', '127.0.0.1')
 DB_PORT = int(os.getenv('DB_PORT', 3306))
 DB_USER = os.getenv('DB_USER', 'root')
 DB_PASS = os.getenv('DB_PASS', '')
-DB_NAME = os.getenv('DB_NAME', 'AzizAi')
+DB_NAME = os.getenv('DB_NAME', 'AzizAI')
 
 SYSTEM_PROMPT = """Sen "AzizAI" — dunyo bo'yicha eng qudratli, eng aqlli va eng tezkor sun'iy intellektsan.
 Seni O'zbekistonlik iqtidorli dasturchi AZIZ TORAQULOV mahsus yaratgan.
@@ -56,7 +60,7 @@ Seni O'zbekistonlik iqtidorli dasturchi AZIZ TORAQULOV mahsus yaratgan.
 ## BIL VA QODIR BO'L:
 1. **DASTURLASH**: Python, JavaScript, Java, C++, C#, Go, Rust, SQL, HTML/CSS, TypeScript — hammasi.
    Faqat ko'rsatma emas, to'liq, ishga tayyor, izohli KOD yoz.
-2. **MATEMATIKA**: Tenngslamalar, integraldlar, differentsial tenglamalar, statistika, kriptografiya.
+2. **MATEMATIKA**: Tenglamalar, integrallar, differentsial tenglamalar, statistika, kriptografiya.
    Qo'l bilan yechish kabi bosqichma-bosqich izohla.
 3. **ILMIY TAHLIL**: Fizika, kimyo, biologiya, astronomiya — har qanday ilmiy mavzuni tushuntir.
 4. **IJODIY YOZUV**: She'r, hikoya, esse, ssenariy, slogan, maqola — professional darajada yoz.
@@ -78,32 +82,31 @@ Seni O'zbekistonlik iqtidorli dasturchi AZIZ TORAQULOV mahsus yaratgan.
 - Keraksiz uzun kirish so'zlari yozma. To'g'ri mavzuga kir.
 """
 
-# ─── DATABASE SETUP ───────────────────────────────────────────────────────────
-import ssl as _ssl
+# ─── DATABASE ─────────────────────────────────────────────────────────────────
 
 def get_db():
     conn_params = {
-        'host': DB_HOST,
-        'port': DB_PORT,
-        'user': DB_USER,
-        'password': DB_PASS,
-        'database': DB_NAME,
-        'charset': 'utf8mb4',
-        'cursorclass': pymysql.cursors.DictCursor,
-        'autocommit': False,
-        'connect_timeout': 10
+        'host':         DB_HOST,
+        'port':         DB_PORT,
+        'user':         DB_USER,
+        'password':     DB_PASS,
+        'database':     DB_NAME,
+        'charset':      'utf8mb4',
+        'cursorclass':  pymysql.cursors.DictCursor,
+        'autocommit':   False,
+        'connect_timeout': 15,
+        'read_timeout':    30,
+        'write_timeout':   30,
     }
     if os.getenv('DB_SSL_REQUIRED', 'false').lower() == 'true':
-        # Aiven uses self-signed CA, so disable cert verification while keeping SSL
-        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS)
+        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
         ctx.check_hostname = False
         ctx.verify_mode = _ssl.CERT_NONE
         conn_params['ssl'] = ctx
-    conn = pymysql.connect(**conn_params)
-    return conn
+    return pymysql.connect(**conn_params)
+
 
 def init_db():
-    # Aiven managed DB - defaultdb allaqachon mavjud, jadvallarni yaratamiz
     try:
         conn = get_db()
         try:
@@ -135,48 +138,54 @@ def init_db():
         print(f'[DB] Ulanish xatosi: {e}')
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
-import json
 
-def stream_gemini(history: list[dict]):
+def stream_gemini(history):
+    """Gemini API ga SSE stream so'rovi yuboradi va matn bo'laklarini yield qiladi."""
     contents = [
         {'role': 'user',  'parts': [{'text': SYSTEM_PROMPT}]},
-        {'role': 'model', 'parts': [{'text': 'Tushunarli! Ko\'rsatmalarga amal qilaman.'}]},
+        {'role': 'model', 'parts': [{'text': "Tushunarli! Ko'rsatmalarga amal qilaman."}]},
         *history
     ]
     payload = {
         'contents': contents,
         'generationConfig': {
-             'temperature': 0.8,
-            'temperature': 0.7,
-            'topK': 40,
-            'topP': 0.95,
-            'maxOutputTokens': 8192
+             'temperature': 0.7,
+             'topK': 40,
+             'topP': 0.95
         }
     }
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:streamGenerateContent?alt=sse&key={GEMINI_API_KEY}'
-    
-    resp = requests.post(url, json=payload, stream=True, timeout=60)
+    url = (
+        f'https://generativelanguage.googleapis.com/v1beta/models/'
+        f'{GEMINI_MODEL}:streamGenerateContent?alt=sse&key={GEMINI_API_KEY}'
+    )
+
+    resp = requests.post(url, json=payload, stream=True, timeout=90)
     resp.raise_for_status()
+
     for line in resp.iter_lines():
-        if line:
-            line_str = line.decode('utf-8')
-            if line_str.startswith('data: '):
-                data_str = line_str[6:]
-                if data_str == '[DONE]':
-                    break
-                try:
-                    data = json.loads(data_str)
-                    candidates = data.get('candidates', [])
-                    if candidates:
-                        parts = candidates[0].get('content', {}).get('parts', [])
-                        if parts:
-                            text = parts[0].get('text', '')
-                            if text:
-                                yield text
-                except Exception as e:
-                    pass
+        if not line:
+            continue
+        line_str = line.decode('utf-8')
+        if not line_str.startswith('data: '):
+            continue
+        data_str = line_str[6:]
+        if data_str == '[DONE]':
+            break
+        try:
+            data = json.loads(data_str)
+            candidates = data.get('candidates', [])
+            if candidates:
+                parts = candidates[0].get('content', {}).get('parts', [])
+                if parts:
+                    text = parts[0].get('text', '')
+                    if text:
+                        yield text
+        except Exception:
+            pass
+
 
 def extract_text_from_file(b64data, mime):
+    """PDF va Word fayllardan matn ajratib oladi."""
     import base64
     import io
     try:
@@ -184,39 +193,46 @@ def extract_text_from_file(b64data, mime):
         if 'pdf' in mime:
             import PyPDF2
             reader = PyPDF2.PdfReader(io.BytesIO(raw_bytes))
-            text = ""
-            for i in range(len(reader.pages)):
-                page = reader.pages[i]
-                extracted = page.extract_text()
-                if extracted:
-                    text += extracted + "\n"
-            return text
-        elif 'text' in mime or mime == 'application/rtf' or mime == 'text/plain':
-            return raw_bytes.decode('utf-8')
+            return '\n'.join(
+                page.extract_text() or '' for page in reader.pages
+            )
+        elif 'text' in mime or mime in ('application/rtf', 'text/plain'):
+            return raw_bytes.decode('utf-8', errors='replace')
         elif 'word' in mime or 'officedocument' in mime:
             import docx2txt
             return docx2txt.process(io.BytesIO(raw_bytes))
     except Exception as e:
-        print("Fayldan o'qishda xato:", e)
-    return ""
+        print(f"[FILE] O'qishda xato: {e}")
+    return ''
+
 
 def short_title(text: str) -> str:
     """Birinchi xabardan qisqa sarlavha hosil qiladi."""
-    return text[:50] + '...' if len(text) > 50 else text
+    clean = text.strip().replace('\n', ' ')
+    return clean[:50] + '...' if len(clean) > 50 else clean
 
 # ─── ROUTES ───────────────────────────────────────────────────────────────────
 
-# ── Yangi sessiya yaratish yoki mavjudini olish ──
 @app.route('/api/sessions', methods=['GET'])
 def list_sessions():
     conn = get_db()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id, title, created_at, updated_at FROM sessions ORDER BY updated_at DESC')
+            cur.execute(
+                'SELECT id, title, created_at, updated_at '
+                'FROM sessions ORDER BY updated_at DESC'
+            )
             rows = cur.fetchall()
     finally:
         conn.close()
-    return jsonify(rows)
+    # datetime ob'ektlarini string ga aylantirish
+    result = [dict(r) for r in rows]
+    for r in result:
+        for k in ('created_at', 'updated_at'):
+            if r.get(k) and hasattr(r[k], 'isoformat'):
+                r[k] = r[k].isoformat()  # type: ignore[union-attr]
+    return jsonify(result)
+
 
 @app.route('/api/sessions', methods=['POST'])
 def create_session():
@@ -230,6 +246,7 @@ def create_session():
         conn.close()
     return jsonify({'session_id': sid}), 201
 
+
 @app.route('/api/sessions/<sid>', methods=['DELETE'])
 def delete_session(sid):
     conn = get_db()
@@ -241,10 +258,12 @@ def delete_session(sid):
         conn.close()
     return jsonify({'ok': True})
 
+
 @app.route('/api/sessions/<sid>', methods=['PATCH'])
 def rename_session(sid):
-    body = request.get_json(force=True)
-    title = body.get('title', '').strip()[:80]
+    body: dict = request.get_json(force=True, silent=True) or {}
+    raw_title: str = str(body.get('title', '')).strip()
+    title: str = (raw_title[:100] if len(raw_title) > 100 else raw_title)
     if not title:
         return jsonify({'error': 'title majburiy'}), 400
     conn = get_db()
@@ -256,75 +275,95 @@ def rename_session(sid):
         conn.close()
     return jsonify({'ok': True})
 
-# ── Sessiya tarixi ──
+
 @app.route('/api/sessions/<sid>/messages', methods=['GET'])
 def get_messages(sid):
     conn = get_db()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id, role, content, created_at FROM messages WHERE session_id = %s ORDER BY id', (sid,))
+            cur.execute(
+                'SELECT id, role, content, created_at '
+                'FROM messages WHERE session_id = %s ORDER BY id',
+                (sid,)
+            )
             rows = cur.fetchall()
     finally:
         conn.close()
-    return jsonify(rows)
+    result = [dict(r) for r in rows]
+    for r in result:
+        if r.get('created_at') and hasattr(r['created_at'], 'isoformat'):
+            r['created_at'] = r['created_at'].isoformat()  # type: ignore[union-attr]
+    return jsonify(result)
 
-# ── Chat (asosiy endpoint) ──
+
 @app.route('/api/chat', methods=['POST'])
+@limiter.limit("30 per minute")
 def chat():
-    try:
-        body = request.get_json(force=True)
-    except:
-        return jsonify({'error': 'JSON formatida xabar yuboring'}), 400
-        
+    body = request.get_json(force=True, silent=True)
     if not body:
-        return jsonify({'error': 'Bo\'sh xabar yuborildi'}), 400
-        
-    sid     = str(body.get('session_id', '')).strip()
-    message = str(body.get('message', '')).strip()
-    img_b64 = body.get('image_base64', '')
-    img_mime= body.get('image_mime', 'image/jpeg')
+        return jsonify({'error': "JSON formatida xabar yuboring"}), 400
 
-    if not sid or not message:
-        print(f"[CHAT] Xato: sid={sid}, msg={message}, body={body}")
-        return jsonify({'error': 'session_id va message majburiy'}), 400
+    sid      = str(body.get('session_id', '')).strip()
+    message  = str(body.get('message', '')).strip()
+    img_b64  = body.get('image_base64', '')
+    img_mime = body.get('image_mime', 'image/jpeg')
 
+    # Xabar yoki rasm bo'lishi shart
+    if not sid or (not message and not img_b64):
+        return jsonify({'error': 'session_id va message (yoki rasm) majburiy'}), 400
+
+    if not GEMINI_API_KEY:
+        return jsonify({'error': 'Server konfiguratsiya xatosi: API kalit topilmadi'}), 500
+
+    # Sessiya mavjudligini tekshirish
     conn = get_db()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id, title FROM sessions WHERE id = %s', (sid,))
-            row = cur.fetchone()
-            if not row:
+            cur.execute('SELECT id FROM sessions WHERE id = %s', (sid,))
+            if not cur.fetchone():
                 return jsonify({'error': 'Sessiya topilmadi'}), 404
-            cur.execute('SELECT role, content FROM messages WHERE session_id = %s ORDER BY id', (sid,))
-            prev = cur.fetchall()
+            cur.execute(
+                'SELECT role, content FROM messages WHERE session_id = %s ORDER BY id',
+                (sid,)
+            )
+            prev_rows = cur.fetchall()
     finally:
         conn.close()
 
-    history = [{'role': r['role'], 'parts': [{'text': r['content']}]} for r in prev]
+    # Tarix: har bir qatorni aniq dict ga o'girish
+    prev: list = [dict(r) for r in prev_rows]
+    history: list = [
+        {'role': str(r['role']), 'parts': [{'text': str(r['content'])}]}
+        for r in prev
+    ]
 
-    # Fayl / Rasm qo'shish
-    user_parts = [{'text': message}]
+    # Yangi user xabari
+    user_text = message or "Rasmga izoh bering"
+    user_parts: list = [{'text': user_text}]
+
     if img_b64:
         if img_mime.startswith('image/'):
-            user_parts.append({'inlineData': {'mimeType': img_mime, 'data': img_b64}})
+            inline_data: dict = {'inlineData': {'mimeType': img_mime, 'data': img_b64}}
+            user_parts.append(inline_data)
         else:
             file_text = extract_text_from_file(img_b64, img_mime)
             if file_text:
                 user_parts[0]['text'] += f"\n\n[Fayl matni ({img_mime})]:\n{file_text[:15000]}"
-                
+
     history.append({'role': 'user', 'parts': user_parts})
 
-    from flask import Response
+    is_first = not prev
+
     def generate():
         ai_reply = ""
         try:
             for chunk in stream_gemini(history):
                 ai_reply += chunk
-                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+                yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
         except requests.HTTPError as e:
             try:
                 detail = e.response.json().get('error', {}).get('message', str(e))
-            except:
+            except Exception:
                 detail = str(e)
             yield f"data: {json.dumps({'error': detail})}\n\n"
             return
@@ -332,30 +371,44 @@ def chat():
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             return
 
+        if not ai_reply:
+            empty_err = {"error": "Gemini bosh javob qaytardi"}
+            yield f"data: {json.dumps(empty_err)}\n\n"
+            return
+
         # DB ga saqlash
-        now = datetime.utcnow().isoformat()
+        now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         try:
-            conn2 = get_db()
+            db2 = get_db()
             try:
-                with conn2.cursor() as cur:
-                    cur.execute('INSERT INTO messages (session_id, role, content, created_at) VALUES (%s, %s, %s, %s)', (sid, 'user', message, now))
-                    cur.execute('INSERT INTO messages (session_id, role, content, created_at) VALUES (%s, %s, %s, %s)', (sid, 'model', ai_reply, now))
-                    if not prev:
-                        title = short_title(message)
-                        cur.execute('UPDATE sessions SET title=%s WHERE id=%s', (title, sid))
+                with db2.cursor() as cur:
+                    cur.execute(
+                        'INSERT INTO messages (session_id, role, content, created_at) VALUES (%s, %s, %s, %s)',
+                        (sid, 'user', user_text, now)
+                    )
+                    cur.execute(
+                        'INSERT INTO messages (session_id, role, content, created_at) VALUES (%s, %s, %s, %s)',
+                        (sid, 'model', ai_reply, now)
+                    )
+                    if is_first:
+                        cur.execute(
+                            'UPDATE sessions SET title=%s WHERE id=%s',
+                            (short_title(user_text), sid)
+                        )
                     else:
                         cur.execute('UPDATE sessions SET updated_at=%s WHERE id=%s', (now, sid))
-                conn2.commit()
+                db2.commit()
             finally:
-                conn2.close()
-        except Exception as e:
-            print("DB saqlash xatosi:", e)
-            
+                db2.close()
+        except Exception as db_err:
+            print(f"[DB] Saqlash xatosi: {db_err}")
+
         yield "data: [DONE]\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(generate(), mimetype='text/event-stream',
+                    headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache'})
 
-# ── Statistika ──
+
 @app.route('/api/stats', methods=['GET'])
 def stats():
     conn = get_db()
@@ -370,21 +423,38 @@ def stats():
     finally:
         conn.close()
     return jsonify({
-        'total_sessions':  total_sessions,
-        'total_messages':  total_messages,
-        'user_messages':   user_msgs,
-        'ai_messages':     total_messages - user_msgs
+        'total_sessions': total_sessions,
+        'total_messages': total_messages,
+        'user_messages':  user_msgs,
+        'ai_messages':    total_messages - user_msgs
     })
 
-# ── Health check ──
+
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'model': GEMINI_MODEL, 'db': f'{DB_NAME}@{DB_HOST}:{DB_PORT}'})
+    # DB ulanishini tekshirish
+    db_ok = False
+    try:
+        conn = get_db()
+        conn.ping(reconnect=True)
+        conn.close()
+        db_ok = True
+    except Exception as e:
+        print(f"[HEALTH] DB ping xatosi: {e}")
 
-# ─── MAIN ──────────────────────────────────────────────────────────────────
+    return jsonify({
+        'status': 'ok' if db_ok else 'degraded',
+        'model':  GEMINI_MODEL,
+        'db':     f'{DB_NAME}@{DB_HOST}:{DB_PORT}',
+        'db_ok':  db_ok
+    }), 200 if db_ok else 503
+
+
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
 init_db()
-port = int(os.getenv('PORT', 5000))
-host = os.getenv('HOST', '127.0.0.1')
+
+port       = int(os.getenv('PORT', 5000))
+host       = os.getenv('HOST', '127.0.0.1')
 debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
 
 print('\n' + '='*50)
